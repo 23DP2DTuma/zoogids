@@ -16,4 +16,5 @@ return [
     'cannot_delete_self' => 'Delete your own account on the profile page.',
     'cannot_demote_self' => 'You cannot remove the admin role from yourself.',
     'subscription_cancelled' => 'A cancelled subscription cannot be changed.',
+    'order_cancelled_final' => 'A cancelled order cannot be restored.',
 ];

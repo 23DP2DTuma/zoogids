@@ -3,71 +3,83 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\CheckoutRequest;
 use App\Models\Order;
-use App\Models\Product;
+use App\Models\Subscription;
+use App\Services\OrderService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
-    public function store(Request $request)
+    /** Lietotāja pasūtījumu vēsture. */
+    public function index(Request $request)
     {
-        $data = $request->validate([
-            'customer_name' => 'required|string|max:60',
-            'email' => 'required|email|max:50',
-            'delivery_type' => 'required|in:pakomāts,kurjers',
-            'address' => 'required|string|max:255',
-            'subscription_interval' => 'nullable|integer|min:7|max:90',
-            'items' => 'required|array|min:1',
-            'items.*.product_id' => 'required|integer|exists:products,id',
-            'items.*.quantity' => 'required|integer|min:1',
-        ], [
-            'required' => 'Lauks ":attribute" ir obligāts.',
-            'email' => 'Lūdzu, ievadiet derīgu e-pasta adresi.',
-            'subscription_interval.min' => 'Abonementa intervālam jābūt no 7 līdz 90 dienām.',
-            'subscription_interval.max' => 'Abonementa intervālam jābūt no 7 līdz 90 dienām.',
-        ]);
+        return $request->user()->orders()
+            ->with('items.product:id,name,image')
+            ->latest()
+            ->paginate(10);
+    }
 
-        $order = DB::transaction(function () use ($data) {
-            $products = Product::whereIn('id', collect($data['items'])->pluck('product_id'))->lockForUpdate()->get()->keyBy('id');
+    public function show(Order $order)
+    {
+        Gate::authorize('view', $order);
 
-            $total = 0;
-            foreach ($data['items'] as $item) {
-                $p = $products[$item['product_id']];
-                if ($item['quantity'] > $p->stock) {
-                    throw ValidationException::withMessages(['items' => "Produkts \"{$p->name}\" pieejams tikai {$p->stock} gab."]);
+        return $order->load(['items.product:id,name,image,species', 'subscription:id,interval_days,status']);
+    }
+
+    /**
+     * Noformēšana no servera groza: transakcija + lockForUpdate (OrderService),
+     * pēc izvēles — abonementi katrai groza precei ar −10 % atlaidi.
+     */
+    public function store(CheckoutRequest $request, OrderService $orders)
+    {
+        $user = $request->user();
+        $cart = $user->cartOrCreate();
+        $items = $cart->items()->get(['product_id', 'quantity']);
+
+        if ($items->isEmpty()) {
+            throw ValidationException::withMessages(['items' => __('messages.cart_empty')]);
+        }
+
+        $subscribe = $request->boolean('subscribe');
+        $address = $request->deliveryAddress();
+
+        $order = DB::transaction(function () use ($user, $cart, $items, $request, $orders, $subscribe, $address) {
+            $order = $orders->place($user, $items->toArray(), $request->validated('delivery_type'), $address, $subscribe);
+
+            if ($subscribe) {
+                foreach ($items as $item) {
+                    Subscription::create([
+                        'user_id' => $user->id,
+                        'product_id' => $item->product_id,
+                        'quantity' => $item->quantity,
+                        'interval_days' => $request->validated('interval_days'),
+                        'next_delivery_date' => today()->addDays($request->validated('interval_days')),
+                        'delivery_type' => $request->validated('delivery_type'),
+                        'address' => $address,
+                        'status' => 'aktīvs',
+                    ]);
                 }
-                $total += $p->price * $item['quantity'];
             }
 
-            // Bezmaksas piegāde no 35 EUR, citādi pakomāts 2.99 / kurjers 5.99
-            $delivery = $total >= 35 ? 0 : ($data['delivery_type'] === 'pakomāts' ? 2.99 : 5.99);
-
-            // Abonementam -10 % atlaide precēm
-            if (! empty($data['subscription_interval'])) {
-                $total *= 0.9;
-            }
-            $total += $delivery;
-
-            $order = Order::create([
-                ...collect($data)->except('items')->all(),
-                'total' => round($total, 2),
-            ]);
-
-            foreach ($data['items'] as $item) {
-                $p = $products[$item['product_id']];
-                $order->items()->create([
-                    'product_id' => $p->id,
-                    'quantity' => $item['quantity'],
-                    'cena_bridi' => $p->price,
-                ]);
-                $p->decrement('stock', $item['quantity']);
-            }
+            $cart->items()->delete();
 
             return $order;
         });
 
-        return response()->json($order->load('items.product:id,name,image'), 201);
+        return response()->json([
+            ...$order->load('items.product:id,name,image')->toArray(),
+            'subscriptions_created' => $subscribe ? $items->count() : 0,
+            'interval_days' => $subscribe ? (int) $request->validated('interval_days') : null,
+        ], 201);
+    }
+
+    /** Pakomātu saraksts piegādes formai. */
+    public function lockers()
+    {
+        return config('lockers');
     }
 }

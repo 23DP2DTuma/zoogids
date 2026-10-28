@@ -5,6 +5,7 @@ import { fmtDate, SPECIES } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useStore } from '../lib/store';
 import { loginPath } from './Guards';
+import { Modal } from './Modal';
 
 const NAV = [
     ['/katalogs', 'nav.catalog'],
@@ -145,6 +146,31 @@ function UserMenu() {
     );
 }
 
+/** Viesis nospieda "Grozā": prece saglabāta lokāli, piedāvājam pieteikties (pēc tam grozi tiek apvienoti). */
+function LoginPrompt() {
+    const { t } = useI18n();
+    const { loginPrompt, closeLoginPrompt } = useStore();
+    const location = useLocation();
+    if (!loginPrompt) return null;
+    const next = encodeURIComponent(location.pathname + location.search);
+    return (
+        <Modal title={t('cart.loginTitle')} onClose={closeLoginPrompt} size="max-w-md">
+            <p className="text-ink/70">{t('cart.loginText', { name: loginPrompt.name })}</p>
+            <div className="mt-5 flex flex-wrap gap-2">
+                <Link to={`/pieslegties?next=${next}`} onClick={closeLoginPrompt} className="btn-primary flex-1">
+                    {t('auth.login')}
+                </Link>
+                <Link to={`/registreties?next=${next}`} onClick={closeLoginPrompt} className="btn-ghost flex-1">
+                    {t('auth.register')}
+                </Link>
+            </div>
+            <button onClick={closeLoginPrompt} className="mt-3 w-full text-center text-sm font-semibold text-ink/60 hover:text-ink">
+                {t('cart.continueBrowsing')}
+            </button>
+        </Modal>
+    );
+}
+
 export default function Layout() {
     const { t } = useI18n();
     const { user } = useAuth();
@@ -213,6 +239,8 @@ export default function Layout() {
             <footer className="border-t border-black/5 px-4 py-8 text-center text-sm text-ink/60">
                 ZooGids · {t('footer.text')} · {new Date().getFullYear()}
             </footer>
+
+            <LoginPrompt />
 
             {toast && (
                 <div key={toast.key} role="status" aria-live="polite" className={`fixed bottom-5 left-1/2 z-[60] w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-xl px-5 py-3 font-semibold text-white shadow-lg ${toast.type === 'error' ? 'bg-red-600' : 'bg-ink'}`}>

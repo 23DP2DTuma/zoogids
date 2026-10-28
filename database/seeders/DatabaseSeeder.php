@@ -7,7 +7,9 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Problem;
 use App\Models\Product;
+use App\Models\Subscription;
 use App\Models\User;
+use App\Services\OrderService;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -62,5 +64,36 @@ class DatabaseSeeder extends Seeder
             ['type' => 'vakcinācija', 'date' => today()->addDays(14), 'description' => 'Otrā kompleksā vakcīna'],
             ['type' => 'vizīte', 'date' => today()->addDays(25), 'description' => 'Veterinārārsta apskate'],
         ]);
+
+        $this->seedOrders($anna, [
+            // [dienas atpakaļ, statuss, [[produkta id, daudzums], ...], piegāde]
+            [40, 'piegādāts', [[1, 1], [13, 1]], 'kurjers'],
+            [25, 'piegādāts', [[5, 2], [17, 1]], 'pakomāts'],
+            [10, 'atcelts', [[16, 1]], 'pakomāts'],
+            [3, 'nosūtīts', [[9, 2]], 'pakomāts'],
+            [1, 'apstrādē', [[12, 1]], 'kurjers'],
+        ]);
+
+        // Aktīvs abonements: kaķēnu barība Mincei ik pēc 30 dienām (pirmais pasūtījums šodien, −10 %)
+        $locker = 'Omniva pakomāts "Origo", Stacijas laukums 2, Rīga';
+        $sub = Subscription::create([
+            'user_id' => $anna->id, 'product_id' => 6, 'quantity' => 1, 'interval_days' => 30,
+            'next_delivery_date' => today()->addDays(30), 'delivery_type' => 'pakomāts', 'address' => $locker, 'status' => 'aktīvs',
+        ]);
+        app(OrderService::class)->place($anna, [['product_id' => 6, 'quantity' => 1]], 'pakomāts', $locker, true, $sub);
+    }
+
+    /** Demo pasūtījumi ar dažādiem statusiem un datumiem pagātnē. */
+    private function seedOrders(User $user, array $orders): void
+    {
+        $service = app(OrderService::class);
+        $address = ['kurjers' => 'Brīvības iela 10-5, Rīga, LV-1010', 'pakomāts' => 'DPD pakomāts "Akropole Alfa", Brīvības gatve 372, Rīga'];
+
+        foreach ($orders as [$daysAgo, $status, $lines, $delivery]) {
+            $order = $service->place($user, array_map(fn ($l) => ['product_id' => $l[0], 'quantity' => $l[1]], $lines), $delivery, $address[$delivery]);
+            $service->changeStatus($order, $status);
+            $date = now()->subDays($daysAgo);
+            $order->forceFill(['created_at' => $date, 'updated_at' => $date, 'paid_at' => $date])->saveQuietly();
+        }
     }
 }

@@ -12,6 +12,7 @@ import Catalog from './pages/Catalog';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import NotFound, { Forbidden } from './pages/NotFound';
+import { OrderDetail } from './pages/Orders';
 import Pets from './pages/Pets';
 import Product from './pages/Product';
 import Profile from './pages/Profile';
@@ -39,6 +40,7 @@ function AppRoutes() {
                 <Route element={<RequireAuth />}>
                     <Route path="profils" element={<Profile />} />
                     <Route path="mani-miluli" element={<Pets />} />
+                    <Route path="pasutijums/:id" element={<OrderDetail />} />
                 </Route>
 
                 <Route path="403" element={<Forbidden />} />

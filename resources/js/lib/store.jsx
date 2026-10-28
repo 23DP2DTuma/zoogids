@@ -32,8 +32,11 @@ export function StoreProvider({ children }) {
     const [pets, setPets] = useState([]);
     const [upcoming, setUpcoming] = useState([]);
     const [activePetId, setActivePetId] = usePersisted('zg_active_pet', null);
-    const [cart, setCart] = usePersisted('zg_cart', []);
+    const [guestCart, setGuestCart] = usePersisted('zg_cart', []);
+    const [serverCart, setServerCart] = useState([]);
+    const [loginPrompt, setLoginPrompt] = useState(null);
     const [toast, setToast] = useState(null);
+    const cart = user ? serverCart : guestCart;
 
     const notify = useCallback((text, type = 'success') => {
         setToast({ text, type, key: Date.now() });
@@ -55,7 +58,82 @@ export function StoreProvider({ children }) {
         }
     }, [user, reloadPets]);
 
+    // Pēc pieteikšanās viesa grozs (localStorage) vienreiz tiek apvienots ar servera grozu un notīrīts
+    useEffect(() => {
+        if (!user) {
+            setServerCart([]);
+            return;
+        }
+        const pending = guestCart.map((i) => ({ product_id: i.product.id, quantity: i.quantity }));
+        const request = pending.length ? api('/cart/merge', { method: 'POST', body: { items: pending } }) : api('/cart');
+        request
+            .then((res) => {
+                setServerCart(res.items);
+                if (pending.length) {
+                    setGuestCart([]);
+                    notify(t('cart.merged'));
+                }
+            })
+            .catch(() => {});
+    }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const activePet = pets.find((p) => String(p.id) === String(activePetId)) || null;
+
+    const addToCart = useCallback(
+        async (product, qty = 1) => {
+            if (!user) {
+                // Viesis: saglabājam lokāli un piedāvājam pieteikties
+                setGuestCart((c) => {
+                    const ex = c.find((i) => i.product.id === product.id);
+                    if (ex) return c.map((i) => (i.product.id === product.id ? { ...i, quantity: Math.min(i.quantity + qty, product.stock) } : i));
+                    return [...c, { product, quantity: Math.min(qty, product.stock) }];
+                });
+                setLoginPrompt(product);
+                return;
+            }
+            try {
+                const res = await api('/cart/items', { method: 'POST', body: { product_id: product.id, quantity: qty } });
+                setServerCart(res.items);
+                notify(t('cart.added', { name: product.name }));
+            } catch (err) {
+                notify(err.message, 'error');
+            }
+        },
+        [user, setGuestCart, notify],
+    );
+
+    const setQty = useCallback(
+        async (id, quantity) => {
+            if (quantity < 1) return;
+            if (!user) {
+                setGuestCart((c) => c.map((i) => (i.product.id === id ? { ...i, quantity: Math.min(quantity, i.product.stock) } : i)));
+                return;
+            }
+            try {
+                setServerCart((await api(`/cart/items/${id}`, { method: 'PUT', body: { quantity } })).items);
+            } catch (err) {
+                notify(err.message, 'error');
+            }
+        },
+        [user, setGuestCart, notify],
+    );
+
+    const removeFromCart = useCallback(
+        async (id) => {
+            if (!user) {
+                setGuestCart((c) => c.filter((i) => i.product.id !== id));
+                notify(t('cart.removed'));
+                return;
+            }
+            try {
+                setServerCart((await api(`/cart/items/${id}`, { method: 'DELETE' })).items);
+                notify(t('cart.removed'));
+            } catch (err) {
+                notify(err.message, 'error');
+            }
+        },
+        [user, setGuestCart, notify],
+    );
 
     const savePet = useCallback(
         async (pet) => {
@@ -106,21 +184,16 @@ export function StoreProvider({ children }) {
             cart,
             cartCount: cart.reduce((s, i) => s + i.quantity, 0),
             cartTotal: cart.reduce((s, i) => s + i.quantity * Number(i.product.price), 0),
-            addToCart: (product, qty = 1) => {
-                setCart((c) => {
-                    const ex = c.find((i) => i.product.id === product.id);
-                    if (ex) return c.map((i) => (i.product.id === product.id ? { ...i, quantity: Math.min(i.quantity + qty, product.stock) } : i));
-                    return [...c, { product, quantity: qty }];
-                });
-                notify(t('cart.added', { name: product.name }));
-            },
-            setQty: (id, quantity) => setCart((c) => c.map((i) => (i.product.id === id ? { ...i, quantity: Math.max(1, Math.min(quantity, i.product.stock)) } : i))),
-            removeFromCart: (id) => setCart((c) => c.filter((i) => i.product.id !== id)),
-            clearCart: () => setCart([]),
+            addToCart,
+            setQty,
+            removeFromCart,
+            clearCart: () => (user ? setServerCart([]) : setGuestCart([])),
+            loginPrompt,
+            closeLoginPrompt: () => setLoginPrompt(null),
             toast,
             notify,
         }),
-        [pets, upcoming, activePet, setActivePetId, reloadPets, savePet, deletePet, saveReminder, deleteReminder, cart, setCart, toast, notify],
+        [pets, upcoming, activePet, setActivePetId, reloadPets, savePet, deletePet, saveReminder, deleteReminder, cart, user, setGuestCart, addToCart, setQty, removeFromCart, loginPrompt, toast, notify],
     );
 
     return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

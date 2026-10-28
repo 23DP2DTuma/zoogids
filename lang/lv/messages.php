@@ -16,4 +16,5 @@ return [
     'cannot_delete_self' => 'Savu kontu dzēsiet profila lapā.',
     'cannot_demote_self' => 'Jūs nevarat noņemt administratora lomu pats sev.',
     'subscription_cancelled' => 'Atcelts abonements vairs nav maināms.',
+    'order_cancelled_final' => 'Atceltu pasūtījumu vairs nevar atjaunot.',
 ];
