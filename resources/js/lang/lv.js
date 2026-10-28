@@ -316,6 +316,13 @@ export default {
         driverKeywords: 'Filtrs darbojas pēc atslēgvārdiem (lv / ru / en).',
         driverLlm: 'Problēmas atpazītas ar MI valodas modeli.',
     },
+    tips: {
+        title: 'Padomi iesācējiem',
+        none: 'Šai sugai raksti vēl nav publicēti.',
+        all: 'Visi padomi',
+        cta: 'Gribat atgādinājumus par vakcināciju?',
+        ctaButton: 'Izveidot mīluļa profilu',
+    },
     cart: {
         title: 'Grozs',
         added: '“{name}” pievienots grozam',

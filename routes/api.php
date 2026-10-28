@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PetController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReminderController;
+use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\SmartFilterController;
 use App\Http\Controllers\Api\SubscriptionController;
 use Illuminate\Support\Facades\Route;
@@ -53,5 +54,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/orders', [OrderController::class, 'store']);
     Route::get('/subscriptions', [SubscriptionController::class, 'index']);
     Route::put('/subscriptions/{subscription}', [SubscriptionController::class, 'update']);
+
+    // Atsauksmes
+    Route::get('/reviews/mine', [ReviewController::class, 'mine']);
+    Route::post('/products/{product}/reviews', [ReviewController::class, 'store']);
+    Route::put('/reviews/{review}', [ReviewController::class, 'update']);
+    Route::delete('/reviews/{review}', [ReviewController::class, 'destroy']);
 
 });

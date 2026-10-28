@@ -7,6 +7,7 @@ import { api, fieldErrors } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useStore } from '../lib/store';
 import { confirmed, password, required, validate } from '../lib/validate';
+import MyReviews from './MyReviews';
 import { OrdersTab, SubscriptionsTab } from './Orders';
 import Pets from './Pets';
 import { USER_RULES } from './Register';
@@ -16,6 +17,7 @@ const TABS = [
     ['miluli', 'profile.tabPets', () => <Pets embedded />],
     ['pasutijumi', 'profile.tabOrders', OrdersTab],
     ['abonementi', 'profile.tabSubscriptions', SubscriptionsTab],
+    ['atsauksmes', 'profile.tabReviews', MyReviews],
 ];
 
 /** Lietotāja panelis: profila dati, mīluļi, pasūtījumi, abonementi, atsauksmes. */

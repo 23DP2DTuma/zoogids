@@ -7,6 +7,7 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Problem;
 use App\Models\Product;
+use App\Models\Review;
 use Illuminate\Http\Request;
 
 class CatalogController extends Controller
@@ -18,13 +19,13 @@ class CatalogController extends Controller
             'categories' => Category::orderBy('name')->get(),
             'brands' => Brand::orderBy('name')->get(),
             'problems' => Problem::orderBy('name')->get(['id', 'name']),
-            'species' => ['suns', 'kaķis', 'grauzējs', 'putns'],
+            'species' => Product::SPECIES,
         ];
     }
 
     /**
      * Produktu saraksts ar filtriem:
-     * q, category, brand, species, min_price, max_price, sort (price_asc|price_desc|rating), exclude (alergēni, ar komatu)
+     * q, category, brand, species, min_price, max_price, sort (price_asc|price_desc|rating), exclude (alergēni, ar komatu), problem, food
      */
     public function index(Request $request)
     {
@@ -68,8 +69,21 @@ class CatalogController extends Controller
         return $query->paginate($data['per_page'] ?? 12)->withQueryString();
     }
 
-    public function show(Product $product)
+    /** Produkts ar redzamajām atsauksmēm; pieteiktam lietotājam — vai drīkst rakstīt atsauksmi. */
+    public function show(Request $request, Product $product)
     {
-        return $product->load(['category', 'brand', 'problems']);
+        $product->load([
+            'category', 'brand', 'problems',
+            'reviews' => fn ($q) => $q->where('is_visible', true)->with('user:id,name')->latest(),
+        ]);
+
+        $user = $request->user('sanctum');
+        $mine = $user ? Review::where('user_id', $user->id)->where('product_id', $product->id)->first() : null;
+
+        return [
+            ...$product->toArray(),
+            'can_review' => $user ? ($mine !== null || Review::canReview($user, $product->id)) : false,
+            'my_review' => $mine,
+        ];
     }
 }

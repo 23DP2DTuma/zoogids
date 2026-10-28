@@ -73,6 +73,19 @@ class User extends Authenticatable
         return $this->hasMany(Subscription::class);
     }
 
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    /** Dzēš kontu; atsauksmes tiek dzēstas ar FK cascade, tāpēc vērtējumi jāpārrēķina. */
+    public function deleteAccount(): void
+    {
+        $productIds = $this->reviews()->pluck('product_id')->all();
+        $this->delete();
+        Product::recalculateRating(...$productIds);
+    }
+
     /** Lietotāja grozs (tiek izveidots pēc pieprasījuma). */
     public function cartOrCreate(): Cart
     {

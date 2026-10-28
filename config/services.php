@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    // Gudrais filtrs: keywords (noklusējums) vai llm (OpenAI-saderīgs API, kļūdas gadījumā — keywords)
+    'smart_filter' => [
+        'driver' => env('SMART_FILTER_DRIVER', 'keywords'),
+        'llm' => [
+            'key' => env('LLM_API_KEY'),
+            'url' => env('LLM_API_URL', 'https://api.openai.com/v1/chat/completions'),
+            'model' => env('LLM_MODEL', 'gpt-4o-mini'),
+        ],
+    ],
+
 ];
