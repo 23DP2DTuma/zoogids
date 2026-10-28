@@ -1,11 +1,11 @@
-# ZooGids — прототип (Laravel + React + Tailwind CSS + Vite)
+# ZooGids — прототип (Laravel 12 + React 19 + Tailwind CSS 4 + Vite 7)
 
 Интернет-магазин товаров для питомцев с «профилем питомца», «умным фильтром» и калькулятором корма.
 Интерфейс на латышском, как в документации.
 
 ## Запуск
 
-Требуется: PHP 8.3+, Composer, Node.js 20+.
+Требуется: PHP 8.2+, Composer, Node.js 20+.
 
 ```bash
 composer install
