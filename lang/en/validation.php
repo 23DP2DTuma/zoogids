@@ -5,8 +5,8 @@ return [
     'before_or_equal' => 'The :attribute field must not be in the future.',
     'custom' => [
         'email' => ['unique' => 'A user with this email is already registered.'],
-        'weight' => ['gt' => 'Weight must be a positive number.'],
-        'price' => ['gt' => 'Price must be a positive number.'],
+        'weight' => ['gt' => 'Weight must be a positive number.', 'decimal' => 'The weight field must have at most 2 decimal places.'],
+        'price' => ['gt' => 'Price must be a positive number.', 'decimal' => 'The price field must have at most 2 decimal places.'],
         'interval_days' => [
             'min' => 'Subscription interval must be between 7 and 90 days.',
             'max' => 'Subscription interval must be between 7 and 90 days.',

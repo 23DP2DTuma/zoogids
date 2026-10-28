@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { ageMonths } from './api';
+import { t } from '../lang';
+import { ageMonths, api } from './api';
+import { useAuth } from './auth';
 
-// Prototipā mīluļi un grozs glabājas pārlūkā (localStorage).
-// Pilnajā versijā tie būs saistīti ar lietotāja kontu (tabulas "Mīluļi", "Grozi").
+// Veikala stāvoklis: mīluļi un atgādinājumi (no API), grozs, paziņojumi (toast).
+// localStorage tiek lietots tikai viesa grozam un UI iestatījumiem (aktīvais mīlulis, valoda).
 const StoreContext = createContext(null);
 
 function usePersisted(key, initial) {
@@ -16,7 +18,8 @@ function usePersisted(key, initial) {
     });
     useEffect(() => {
         try {
-            localStorage.setItem(key, JSON.stringify(value));
+            if (value === null || value === undefined) localStorage.removeItem(key);
+            else localStorage.setItem(key, JSON.stringify(value));
         } catch {
             /* ignore */
         }
@@ -24,35 +27,82 @@ function usePersisted(key, initial) {
     return [value, setValue];
 }
 
-const DEMO_PETS = [
-    { id: 'p1', name: 'Reksis', species: 'suns', breed: 'bīgls', birthdate: '2023-03-14', weight: 12.5, allergies: 'vista', activity: 'normal', reminders: [{ id: 'r1', type: 'Pretparazītu līdzeklis', date: '2026-11-05' }, { id: 'r2', type: 'Vakcinācija', date: '2027-03-14' }] },
-    { id: 'p2', name: 'Mince', species: 'kaķis', breed: '', birthdate: '2026-05-20', weight: 2.1, allergies: '', activity: 'high', reminders: [{ id: 'r3', type: 'Vakcinācija', date: '2026-11-12' }] },
-];
-
 export function StoreProvider({ children }) {
-    const [pets, setPets] = usePersisted('zg_pets', DEMO_PETS);
+    const { user } = useAuth();
+    const [pets, setPets] = useState([]);
+    const [upcoming, setUpcoming] = useState([]);
     const [activePetId, setActivePetId] = usePersisted('zg_active_pet', null);
     const [cart, setCart] = usePersisted('zg_cart', []);
     const [toast, setToast] = useState(null);
 
     const notify = useCallback((text, type = 'success') => {
         setToast({ text, type, key: Date.now() });
-        setTimeout(() => setToast(null), 3200);
+        setTimeout(() => setToast((cur) => (cur && Date.now() - cur.key >= 3000 ? null : cur)), 3200);
     }, []);
 
+    const reloadPets = useCallback(async () => {
+        if (!user) return;
+        const [p, u] = await Promise.all([api('/pets'), api('/reminders/upcoming')]);
+        setPets(p);
+        setUpcoming(u);
+    }, [user]);
+
+    useEffect(() => {
+        if (user) reloadPets().catch(() => {});
+        else {
+            setPets([]);
+            setUpcoming([]);
+        }
+    }, [user, reloadPets]);
+
     const activePet = pets.find((p) => String(p.id) === String(activePetId)) || null;
+
+    const savePet = useCallback(
+        async (pet) => {
+            const saved = pet.id ? await api(`/pets/${pet.id}`, { method: 'PUT', body: pet }) : await api('/pets', { method: 'POST', body: pet });
+            await reloadPets();
+            return saved;
+        },
+        [reloadPets],
+    );
+
+    const deletePet = useCallback(
+        async (id) => {
+            await api(`/pets/${id}`, { method: 'DELETE' });
+            if (String(activePetId) === String(id)) setActivePetId(null);
+            await reloadPets();
+        },
+        [activePetId, setActivePetId, reloadPets],
+    );
+
+    const saveReminder = useCallback(
+        async (petId, reminder) => {
+            const saved = reminder.id ? await api(`/reminders/${reminder.id}`, { method: 'PUT', body: reminder }) : await api(`/pets/${petId}/reminders`, { method: 'POST', body: reminder });
+            await reloadPets();
+            return saved;
+        },
+        [reloadPets],
+    );
+
+    const deleteReminder = useCallback(
+        async (id) => {
+            await api(`/reminders/${id}`, { method: 'DELETE' });
+            await reloadPets();
+        },
+        [reloadPets],
+    );
 
     const value = useMemo(
         () => ({
             pets,
+            upcoming,
             activePet,
             setActivePetId,
-            savePet: (pet) =>
-                setPets((list) => (pet.id && list.some((p) => p.id === pet.id) ? list.map((p) => (p.id === pet.id ? pet : p)) : [...list, { ...pet, id: crypto.randomUUID?.() ?? String(Date.now()), reminders: pet.reminders ?? [] }])),
-            deletePet: (id) => {
-                setPets((list) => list.filter((p) => p.id !== id));
-                if (activePetId === id) setActivePetId(null);
-            },
+            reloadPets,
+            savePet,
+            deletePet,
+            saveReminder,
+            deleteReminder,
             cart,
             cartCount: cart.reduce((s, i) => s + i.quantity, 0),
             cartTotal: cart.reduce((s, i) => s + i.quantity * Number(i.product.price), 0),
@@ -62,7 +112,7 @@ export function StoreProvider({ children }) {
                     if (ex) return c.map((i) => (i.product.id === product.id ? { ...i, quantity: Math.min(i.quantity + qty, product.stock) } : i));
                     return [...c, { product, quantity: qty }];
                 });
-                notify(`“${product.name}” pievienots grozam`);
+                notify(t('cart.added', { name: product.name }));
             },
             setQty: (id, quantity) => setCart((c) => c.map((i) => (i.product.id === id ? { ...i, quantity: Math.max(1, Math.min(quantity, i.product.stock)) } : i))),
             removeFromCart: (id) => setCart((c) => c.filter((i) => i.product.id !== id)),
@@ -70,7 +120,7 @@ export function StoreProvider({ children }) {
             toast,
             notify,
         }),
-        [pets, activePet, activePetId, cart, toast, notify],
+        [pets, upcoming, activePet, setActivePetId, reloadPets, savePet, deletePet, saveReminder, deleteReminder, cart, setCart, toast, notify],
     );
 
     return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
@@ -85,9 +135,19 @@ export function petFilterParams(pet) {
 }
 
 export function petAgeGroup(pet) {
-    const m = ageMonths(pet?.birthdate);
+    const m = ageMonths(pet?.birth_date);
     if (m === null) return null;
     if (m < 12) return 'jauns';
     if (m >= 84) return 'seniors';
     return 'pieaugušais';
+}
+
+/** Vai produkta sastāvā ir kāds no mīluļa alergēniem (atdalīti ar komatu). */
+export function allergenHits(pet, product) {
+    if (!pet?.allergies || !product?.ingredients) return [];
+    const ing = product.ingredients.toLowerCase();
+    return pet.allergies
+        .split(',')
+        .map((a) => a.trim().toLowerCase())
+        .filter((a) => a && ing.includes(a));
 }

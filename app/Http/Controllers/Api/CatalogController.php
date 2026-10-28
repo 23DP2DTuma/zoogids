@@ -38,10 +38,13 @@ class CatalogController extends Controller
             'sort' => 'nullable|in:price_asc,price_desc,rating',
             'exclude' => 'nullable|string|max:255',
             'problem' => 'nullable|integer',
+            'food' => 'nullable|boolean',
+            'per_page' => 'nullable|integer|min:1|max:100',
         ]);
 
         $query = Product::with(['category', 'brand'])
-            ->when($data['q'] ?? null, fn ($q, $v) => $q->where('name', 'like', "%{$v}%"))
+            ->when($data['q'] ?? null, fn ($q, $v) => $q->where(fn ($w) => $w->where('name', 'like', "%{$v}%")->orWhere('description', 'like', "%{$v}%")))
+            ->when($data['food'] ?? null, fn ($q) => $q->whereNotNull('kcal_per_100g'))
             ->when($data['category'] ?? null, fn ($q, $v) => $q->where('category_id', $v))
             ->when($data['brand'] ?? null, fn ($q, $v) => $q->where('brand_id', $v))
             ->when($data['species'] ?? null, fn ($q, $v) => $q->where('species', $v))
@@ -61,7 +64,8 @@ class CatalogController extends Controller
             default => $query->orderBy('id'),
         };
 
-        return $query->get();
+        // Lappušu dalīšana: 12 produkti lapā, React rāda "Ielādēt vēl"
+        return $query->paginate($data['per_page'] ?? 12)->withQueryString();
     }
 
     public function show(Product $product)

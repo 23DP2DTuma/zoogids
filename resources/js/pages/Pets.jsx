@@ -1,77 +1,96 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ageLabel, fmtDate, SPECIES } from '../lib/api';
+import { useConfirm } from '../components/ConfirmDialog';
+import { Field, FormActions, Modal } from '../components/Modal';
+import { useI18n } from '../lang';
+import { ageLabel, fieldErrors, fmtDate, SPECIES, today } from '../lib/api';
 import { useStore } from '../lib/store';
+import { decimals, max, maxNum, notFuture, positive, required, validate } from '../lib/validate';
 
-const EMPTY = { name: '', species: 'suns', breed: '', birthdate: '', weight: '', allergies: '', activity: 'normal', reminders: [] };
+const EMPTY = { name: '', species: 'suns', breed: '', birth_date: '', weight: '', allergies: '', activity: 'normal' };
+const PET_RULES = {
+    name: [required, max(50)],
+    species: [required],
+    breed: [max(50)],
+    birth_date: [notFuture],
+    weight: [required, positive, decimals(2), maxNum(999.99)],
+    allergies: [max(255)],
+};
+const REMINDER_TYPES = ['vakcinācija', 'pretparazītu', 'vizīte'];
+const REMINDER_ICONS = { vakcinācija: '💉', pretparazītu: '🐛', vizīte: '🩺' };
 
-function validate(p) {
-    const e = {};
-    if (!p.name.trim()) e.name = 'Vārds ir obligāts.';
-    else if (p.name.length > 50) e.name = 'Vārds nedrīkst būt garāks par 50 simboliem.';
-    if (p.breed.length > 50) e.breed = 'Šķirne — līdz 50 simboliem.';
-    if (p.birthdate && new Date(p.birthdate) > new Date()) e.birthdate = 'Dzimšanas datums nedrīkst būt nākotnē.';
-    if (!(Number(p.weight) > 0)) e.weight = 'Svaram jābūt pozitīvam skaitlim.';
-    if (p.allergies.length > 255) e.allergies = 'Alerģijas — līdz 255 simboliem.';
-    return e;
+export function daysUntil(date) {
+    const [y, m, d] = String(date).slice(0, 10).split('-').map(Number);
+    const target = new Date(y, m - 1, d);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return Math.round((target - now) / 86400000);
 }
 
-function daysUntil(date) {
-    return Math.ceil((new Date(date) - new Date()) / 86400000);
-}
-
-export default function Pets() {
-    const { pets, savePet, deletePet, notify, activePet, setActivePetId } = useStore();
+export default function Pets({ embedded = false }) {
+    const { t } = useI18n();
+    const { pets, upcoming, savePet, deletePet, notify, activePet, setActivePetId } = useStore();
+    const confirm = useConfirm();
     const [form, setForm] = useState(null);
     const [errors, setErrors] = useState({});
-    const [confirm, setConfirm] = useState(null);
-    const [reminder, setReminder] = useState({ type: 'Vakcinācija', date: '' });
+    const [busy, setBusy] = useState(false);
+    const [reminderPetId, setReminderPetId] = useState(null);
 
     const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-    const submit = (e) => {
+    const submit = async (e) => {
         e.preventDefault();
-        const errs = validate(form);
+        const errs = validate(form, PET_RULES);
         setErrors(errs);
-        if (Object.keys(errs).length) {
-            notify('Pārbaudiet ievadītos datus', 'error');
-            return;
+        if (Object.keys(errs).length) return notify(t('common.checkForm'), 'error');
+        setBusy(true);
+        try {
+            await savePet({ ...form, weight: String(form.weight).replace(',', '.'), birth_date: form.birth_date || null });
+            notify(form.id ? t('pets.updated') : t('pets.created'));
+            setForm(null);
+        } catch (err) {
+            setErrors(fieldErrors(err));
+            notify(err.message, 'error');
+        } finally {
+            setBusy(false);
         }
-        savePet({ ...form, weight: Math.round(Number(form.weight) * 100) / 100 });
-        notify(form.id ? 'Mīluļa profils atjaunināts' : 'Mīlulis pievienots');
-        setForm(null);
     };
 
-    const addReminder = () => {
-        if (!reminder.date) return;
-        setForm((f) => ({ ...f, reminders: [...(f.reminders || []), { id: String(Date.now()), ...reminder }] }));
-        setReminder({ type: 'Vakcinācija', date: '' });
+    const remove = async (p) => {
+        if (!(await confirm({ title: t('pets.deleteConfirm', { name: p.name }) }))) return;
+        try {
+            await deletePet(p.id);
+            notify(t('pets.deleted'));
+        } catch (err) {
+            notify(err.message, 'error');
+        }
     };
 
-    const upcoming = pets.flatMap((p) => (p.reminders || []).map((r) => ({ ...r, pet: p }))).filter((r) => daysUntil(r.date) >= 0 && daysUntil(r.date) <= 30);
+    const open = (p) => {
+        setErrors({});
+        setForm(p ? { ...EMPTY, ...p, breed: p.breed || '', allergies: p.allergies || '', birth_date: p.birth_date || '' } : EMPTY);
+    };
+
+    const reminderPet = pets.find((p) => p.id === reminderPetId);
 
     return (
         <div>
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-3xl font-extrabold">Mani mīluļi</h1>
-                <button
-                    className="btn-primary"
-                    onClick={() => {
-                        setForm(EMPTY);
-                        setErrors({});
-                    }}
-                >
-                    + Pievienot mīluli
+                {embedded ? <h2 className="text-xl font-extrabold">{t('pets.title')}</h2> : <h1 className="text-3xl font-extrabold">{t('pets.title')}</h1>}
+                <button className="btn-primary" onClick={() => open(null)}>
+                    + {t('pets.add')}
                 </button>
             </div>
 
             {upcoming.length > 0 && (
                 <div className="mt-6 space-y-2">
+                    <p className="text-sm font-bold text-ink/60">{t('reminders.upcomingTitle')}</p>
                     {upcoming.map((r) => (
                         <div key={r.id} className="flex items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 text-amber-900">
                             <span className="text-2xl">🔔</span>
                             <span>
-                                <b>{r.pet.name}</b>: {r.type} — {fmtDate(r.date)} (pēc {daysUntil(r.date)} d.)
+                                <b>{r.pet?.name}</b>: {t(`reminders.types.${r.type}`)} — {fmtDate(r.date)} ({daysUntil(r.date) === 0 ? t('reminders.today') : t('reminders.inDays', { n: daysUntil(r.date) })})
+                                {r.description && <span className="text-amber-800/70"> · {r.description}</span>}
                             </span>
                         </div>
                     ))}
@@ -80,59 +99,59 @@ export default function Pets() {
 
             <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {pets.map((p) => (
-                    <div key={p.id} className={`card p-5 ${activePet?.id === p.id ? 'ring-2 ring-brand-500' : ''}`}>
+                    <div key={p.id} className={`card flex flex-col p-5 ${activePet?.id === p.id ? 'ring-2 ring-brand-500' : ''}`}>
                         <div className="flex items-center gap-3">
-                            <span className="grid size-14 place-items-center rounded-2xl bg-brand-50 text-3xl">{SPECIES[p.species].icon}</span>
-                            <div>
-                                <h3 className="text-lg font-extrabold">{p.name}</h3>
+                            <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-brand-50 text-3xl">{SPECIES[p.species]?.icon}</span>
+                            <div className="min-w-0">
+                                <h3 className="truncate text-lg font-extrabold">{p.name}</h3>
                                 <p className="text-sm text-ink/60">
-                                    {SPECIES[p.species].label}
-                                    {p.breed && `, ${p.breed}`} · {ageLabel(p.birthdate)} · {p.weight} kg
+                                    {SPECIES[p.species]?.label}
+                                    {p.breed && `, ${p.breed}`} · {ageLabel(p.birth_date)} · {Number(p.weight).toFixed(2).replace('.', ',')} kg
                                 </p>
                             </div>
                         </div>
-                        {p.allergies && <p className="mt-3 chip bg-red-50 text-red-700">Alerģija: {p.allergies}</p>}
+                        {p.allergies && <p className="mt-3 chip w-fit bg-red-50 text-red-700">{t('pets.allergy', { list: p.allergies })}</p>}
                         <ul className="mt-3 space-y-1 text-sm">
-                            {(p.reminders || []).map((r) => (
+                            {p.reminders.map((r) => (
                                 <li key={r.id}>
-                                    🔔 {r.type}: {fmtDate(r.date)}
+                                    {REMINDER_ICONS[r.type]} {t(`reminders.types.${r.type}`)}: {fmtDate(r.date)}
                                 </li>
                             ))}
+                            {p.reminders.length === 0 && <li className="text-ink/50">{t('reminders.noneForPet')}</li>}
                         </ul>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                            <button className="btn-primary px-3 py-2 text-sm" onClick={() => setActivePetId(p.id)}>
-                                {activePet?.id === p.id ? '✓ Aktīvs' : 'Izvēlēties'}
+                        <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                            <button className="btn-primary px-3 py-2 text-sm" onClick={() => setActivePetId(activePet?.id === p.id ? null : p.id)}>
+                                {activePet?.id === p.id ? `✓ ${t('pets.active')}` : t('pets.choose')}
                             </button>
                             <Link to="/katalogs" onClick={() => setActivePetId(p.id)} className="btn-ghost px-3 py-2 text-sm">
-                                Preces
+                                {t('pets.products')}
                             </Link>
-                            <button
-                                className="btn-ghost px-3 py-2 text-sm"
-                                onClick={() => {
-                                    setForm({ ...EMPTY, ...p });
-                                    setErrors({});
-                                }}
-                            >
-                                Rediģēt
+                            <Link to={`/kalkulators?pet=${p.id}`} className="btn-ghost px-3 py-2 text-sm">
+                                ⚖️
+                            </Link>
+                            <button className="btn-ghost px-3 py-2 text-sm" onClick={() => setReminderPetId(p.id)}>
+                                🔔 {t('reminders.title')}
                             </button>
-                            <button className="btn-ghost px-3 py-2 text-sm text-red-600" onClick={() => setConfirm(p)}>
-                                Dzēst
+                            <button className="btn-ghost px-3 py-2 text-sm" onClick={() => open(p)}>
+                                {t('common.edit')}
+                            </button>
+                            <button className="btn-ghost px-3 py-2 text-sm text-red-600" onClick={() => remove(p)}>
+                                {t('common.delete')}
                             </button>
                         </div>
                     </div>
                 ))}
-                {pets.length === 0 && <p className="text-ink/60">Vēl nav neviena mīluļa. Pievienojiet pirmo!</p>}
+                {pets.length === 0 && <p className="text-ink/60">{t('pets.empty')}</p>}
             </div>
 
             {form && (
-                <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-black/40 p-4" onClick={() => setForm(null)}>
-                    <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="card w-full max-w-lg space-y-3 p-6" noValidate>
-                        <h2 className="text-xl font-extrabold">{form.id ? 'Rediģēt mīluli' : 'Jauns mīlulis'}</h2>
-                        <Field label="Vārds *" error={errors.name}>
-                            <input className="input" value={form.name} onChange={set('name')} placeholder="Reksis" />
+                <Modal title={form.id ? t('pets.editTitle') : t('pets.newTitle')} onClose={() => setForm(null)}>
+                    <form onSubmit={submit} className="space-y-3" noValidate>
+                        <Field label={`${t('attr.name')} *`} error={errors.name}>
+                            <input className="input" maxLength={50} value={form.name} onChange={set('name')} placeholder="Reksis" />
                         </Field>
-                        <div className="grid grid-cols-2 gap-3">
-                            <Field label="Suga *">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <Field label={`${t('attr.species')} *`} error={errors.species}>
                                 <select className="input" value={form.species} onChange={set('species')}>
                                     {Object.entries(SPECIES).map(([k, s]) => (
                                         <option key={k} value={k}>
@@ -141,96 +160,117 @@ export default function Pets() {
                                     ))}
                                 </select>
                             </Field>
-                            <Field label="Šķirne" error={errors.breed}>
-                                <input className="input" value={form.breed} onChange={set('breed')} placeholder="bīgls" />
+                            <Field label={t('attr.breed')} error={errors.breed}>
+                                <input className="input" maxLength={50} value={form.breed} onChange={set('breed')} placeholder="bīgls" />
                             </Field>
-                            <Field label="Dzimšanas datums" error={errors.birthdate}>
-                                <input className="input" type="date" max={new Date().toISOString().slice(0, 10)} value={form.birthdate} onChange={set('birthdate')} />
+                            <Field label={t('attr.birth_date')} error={errors.birth_date}>
+                                <input className="input" type="date" max={today()} value={form.birth_date} onChange={set('birth_date')} />
                             </Field>
-                            <Field label="Svars, kg *" error={errors.weight}>
-                                <input className="input" type="number" step="0.01" min="0.01" value={form.weight} onChange={set('weight')} placeholder="12.50" />
+                            <Field label={`${t('attr.weight')}, kg *`} error={errors.weight}>
+                                <input className="input" type="number" inputMode="decimal" step="0.01" min="0.01" max="999.99" value={form.weight} onChange={set('weight')} placeholder="12.50" />
                             </Field>
                         </div>
-                        <Field label="Alerģijas" error={errors.allergies}>
-                            <input className="input" value={form.allergies} onChange={set('allergies')} placeholder="vista" />
+                        <Field label={t('attr.allergies')} error={errors.allergies} hint={t('pets.allergiesHint')}>
+                            <input className="input" maxLength={255} value={form.allergies} onChange={set('allergies')} placeholder="vista, kvieši" />
                         </Field>
-                        <Field label="Aktivitāte">
+                        <Field label={t('attr.activity')}>
                             <select className="input" value={form.activity} onChange={set('activity')}>
-                                <option value="low">Zema</option>
-                                <option value="normal">Vidēja</option>
-                                <option value="high">Augsta</option>
+                                {['low', 'normal', 'high'].map((a) => (
+                                    <option key={a} value={a}>
+                                        {t(`pets.activity.${a}`)}
+                                    </option>
+                                ))}
                             </select>
                         </Field>
-                        <div>
-                            <label className="label">Atgādinājumi</label>
-                            <ul className="mb-2 space-y-1 text-sm">
-                                {form.reminders?.map((r) => (
-                                    <li key={r.id} className="flex justify-between">
-                                        <span>
-                                            🔔 {r.type}: {fmtDate(r.date)}
-                                        </span>
-                                        <button type="button" className="text-red-600" onClick={() => setForm((f) => ({ ...f, reminders: f.reminders.filter((x) => x.id !== r.id) }))}>
-                                            ✕
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                            <div className="flex gap-2">
-                                <select className="input" value={reminder.type} onChange={(e) => setReminder((r) => ({ ...r, type: e.target.value }))}>
-                                    <option>Vakcinācija</option>
-                                    <option>Pretparazītu līdzeklis</option>
-                                    <option>Veterinārārsta vizīte</option>
-                                </select>
-                                <input className="input" type="date" value={reminder.date} onChange={(e) => setReminder((r) => ({ ...r, date: e.target.value }))} />
-                                <button type="button" className="btn-ghost" onClick={addReminder}>
-                                    +
-                                </button>
-                            </div>
-                        </div>
-                        <div className="flex justify-end gap-2 pt-2">
-                            <button type="button" className="btn-ghost" onClick={() => setForm(null)}>
-                                Atcelt
-                            </button>
-                            <button className="btn-primary">Saglabāt</button>
-                        </div>
+                        <FormActions onCancel={() => setForm(null)} busy={busy} />
                     </form>
-                </div>
+                </Modal>
             )}
 
-            {confirm && (
-                <div className="fixed inset-0 z-40 grid place-items-center bg-black/40 p-4">
-                    <div className="card w-full max-w-sm p-6 text-center">
-                        <div className="text-4xl">🗑️</div>
-                        <p className="mt-3 font-bold">Vai tiešām dzēst {confirm.name} profilu?</p>
-                        <p className="mt-1 text-sm text-ink/60">Šo darbību nevar atsaukt.</p>
-                        <div className="mt-5 flex justify-center gap-2">
-                            <button className="btn-ghost" onClick={() => setConfirm(null)}>
-                                Atcelt
-                            </button>
-                            <button
-                                className="btn bg-red-600 text-white hover:bg-red-700"
-                                onClick={() => {
-                                    deletePet(confirm.id);
-                                    notify('Mīluļa profils dzēsts');
-                                    setConfirm(null);
-                                }}
-                            >
-                                Dzēst
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {reminderPet && <RemindersModal pet={reminderPet} onClose={() => setReminderPetId(null)} />}
         </div>
     );
 }
 
-function Field({ label, error, children }) {
+/** Mīluļa atgādinājumu pārvaldība (CRUD). */
+function RemindersModal({ pet, onClose }) {
+    const { t } = useI18n();
+    const { saveReminder, deleteReminder, notify } = useStore();
+    const confirm = useConfirm();
+    const empty = { type: 'vakcinācija', date: '', description: '' };
+    const [form, setForm] = useState(empty);
+    const [errors, setErrors] = useState({});
+    const [busy, setBusy] = useState(false);
+
+    const submit = async (e) => {
+        e.preventDefault();
+        const errs = validate(form, { type: [required], date: [required], description: [max(255)] });
+        setErrors(errs);
+        if (Object.keys(errs).length) return;
+        setBusy(true);
+        try {
+            await saveReminder(pet.id, form);
+            notify(form.id ? t('reminders.updated') : t('reminders.created'));
+            setForm(empty);
+        } catch (err) {
+            setErrors(fieldErrors(err));
+            notify(err.message, 'error');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const remove = async (r) => {
+        if (!(await confirm({ title: t('reminders.deleteConfirm') }))) return;
+        try {
+            await deleteReminder(r.id);
+            notify(t('reminders.deleted'));
+        } catch (err) {
+            notify(err.message, 'error');
+        }
+    };
+
     return (
-        <div>
-            <label className="label">{label}</label>
-            {children}
-            {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
-        </div>
+        <Modal title={`🔔 ${t('reminders.title')}: ${pet.name}`} onClose={onClose}>
+            <ul className="space-y-2">
+                {pet.reminders.map((r) => (
+                    <li key={r.id} className="flex items-center gap-2 rounded-xl border border-black/5 px-3 py-2 text-sm">
+                        <span className="min-w-0 flex-1">
+                            {REMINDER_ICONS[r.type]} <b>{t(`reminders.types.${r.type}`)}</b> — {fmtDate(r.date)}
+                            {r.description && <span className="block truncate text-ink/60">{r.description}</span>}
+                        </span>
+                        <button className="rounded-lg px-2 py-1 hover:bg-black/5" onClick={() => setForm({ ...r, description: r.description || '' })} aria-label={t('common.edit')}>
+                            ✏️
+                        </button>
+                        <button className="rounded-lg px-2 py-1 text-red-600 hover:bg-black/5" onClick={() => remove(r)} aria-label={t('common.delete')}>
+                            ✕
+                        </button>
+                    </li>
+                ))}
+                {pet.reminders.length === 0 && <li className="text-sm text-ink/60">{t('reminders.noneForPet')}</li>}
+            </ul>
+
+            <form onSubmit={submit} noValidate className="mt-5 space-y-3 border-t border-black/5 pt-4">
+                <p className="font-bold">{form.id ? t('reminders.editTitle') : t('reminders.newTitle')}</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label={`${t('attr.type')} *`} error={errors.type}>
+                        <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                            {REMINDER_TYPES.map((k) => (
+                                <option key={k} value={k}>
+                                    {t(`reminders.types.${k}`)}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+                    <Field label={`${t('attr.date')} *`} error={errors.date}>
+                        <input className="input" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+                    </Field>
+                </div>
+                <Field label={t('attr.description')} error={errors.description}>
+                    <input className="input" maxLength={255} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                </Field>
+                <FormActions onCancel={form.id ? () => setForm(empty) : onClose} busy={busy} submitLabel={form.id ? t('common.save') : t('common.add')} />
+            </form>
+        </Modal>
     );
 }

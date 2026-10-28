@@ -7,9 +7,13 @@ import { api, fieldErrors } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useStore } from '../lib/store';
 import { confirmed, password, required, validate } from '../lib/validate';
+import Pets from './Pets';
 import { USER_RULES } from './Register';
 
-const TABS = [['dati', 'profile.tabData', ProfileData]];
+const TABS = [
+    ['dati', 'profile.tabData', ProfileData],
+    ['miluli', 'profile.tabPets', () => <Pets embedded />],
+];
 
 /** Lietotāja panelis: profila dati, mīluļi, pasūtījumi, abonementi, atsauksmes. */
 export default function Profile() {

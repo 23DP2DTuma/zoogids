@@ -53,8 +53,8 @@ return [
 
     'custom' => [
         'email' => ['unique' => 'Lietotājs ar šādu e-pastu jau ir reģistrēts.'],
-        'weight' => ['gt' => 'Svaram jābūt pozitīvam skaitlim.'],
-        'price' => ['gt' => 'Cenai jābūt pozitīvam skaitlim.'],
+        'weight' => ['gt' => 'Svaram jābūt pozitīvam skaitlim.', 'decimal' => 'Laukam "Svars" jābūt skaitlim ar ne vairāk kā 2 cipariem aiz komata.'],
+        'price' => ['gt' => 'Cenai jābūt pozitīvam skaitlim.', 'decimal' => 'Laukam "Cena" jābūt skaitlim ar ne vairāk kā 2 cipariem aiz komata.'],
         'interval_days' => [
             'min' => 'Abonementa intervālam jābūt no 7 līdz 90 dienām.',
             'max' => 'Abonementa intervālam jābūt no 7 līdz 90 dienām.',
