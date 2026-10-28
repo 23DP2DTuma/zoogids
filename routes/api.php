@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Api\ArticleController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CartController;
@@ -60,5 +61,26 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products/{product}/reviews', [ReviewController::class, 'store']);
     Route::put('/reviews/{review}', [ReviewController::class, 'update']);
     Route::delete('/reviews/{review}', [ReviewController::class, 'destroy']);
+});
 
+// --- Administrators ---
+Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
+    Route::get('/dashboard', Admin\DashboardController::class);
+
+    Route::apiResource('products', Admin\ProductController::class)->except('show');
+    // multipart/form-data ar attēlu: PUT tiek sūtīts kā POST + _method=PUT
+    Route::post('/products/{product}', [Admin\ProductController::class, 'update']);
+    Route::apiResource('categories', Admin\CategoryController::class)->except('show');
+    Route::apiResource('brands', Admin\BrandController::class)->except('show');
+    Route::apiResource('problems', Admin\ProblemController::class)->except('show');
+    Route::apiResource('articles', Admin\ArticleController::class)->except('show');
+    Route::apiResource('users', Admin\UserController::class)->except('show');
+
+    Route::get('/orders', [Admin\OrderController::class, 'index']);
+    Route::put('/orders/{order}', [Admin\OrderController::class, 'update']);
+    Route::get('/subscriptions', [Admin\SubscriptionController::class, 'index']);
+    Route::put('/subscriptions/{subscription}', [Admin\SubscriptionController::class, 'update']);
+    Route::get('/reviews', [Admin\ReviewController::class, 'index']);
+    Route::put('/reviews/{review}', [Admin\ReviewController::class, 'update']);
+    Route::delete('/reviews/{review}', [Admin\ReviewController::class, 'destroy']);
 });

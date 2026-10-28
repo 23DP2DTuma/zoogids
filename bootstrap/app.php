@@ -5,8 +5,7 @@ use App\Http\Middleware\SetLocale;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
-use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
@@ -35,14 +34,12 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json(['message' => __('messages.unauthenticated')], 401);
             }
         });
-        $exceptions->render(function (AccessDeniedHttpException $e, Request $request) {
-            if ($request->is('api/*')) {
-                return response()->json(['message' => __('messages.forbidden')], 403);
-            }
-        });
-        $exceptions->render(function (NotFoundHttpException $e, Request $request) {
-            if ($request->is('api/*')) {
-                return response()->json(['message' => __('messages.not_found')], 404);
+        // 403 (politikas, admin starpprogrammatūra) un 404 (modelis nav atrasts)
+        $exceptions->render(function (HttpException $e, Request $request) {
+            if ($request->is('api/*') && in_array($e->getStatusCode(), [403, 404], true)) {
+                $key = $e->getStatusCode() === 403 ? 'messages.forbidden' : 'messages.not_found';
+
+                return response()->json(['message' => __($key)], $e->getStatusCode());
             }
         });
         $exceptions->render(function (ThrottleRequestsException $e, Request $request) {

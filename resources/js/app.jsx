@@ -1,11 +1,14 @@
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { ConfirmProvider } from './components/ConfirmDialog';
-import { GuestOnly, RequireAuth } from './components/Guards';
+import { GuestOnly, RequireAdmin, RequireAuth } from './components/Guards';
 import Layout from './components/Layout';
 import { I18nProvider, useI18n } from './lang';
 import { AuthProvider } from './lib/auth';
 import { StoreProvider } from './lib/store';
+import AdminLayout, { AdminDashboard } from './pages/admin/AdminLayout';
+import { ArticlesAdmin, BrandsAdmin, CategoriesAdmin, ProblemsAdmin, ProductsAdmin } from './pages/admin/CatalogAdmin';
+import { OrdersAdmin, ReviewsAdmin, SubscriptionsAdmin, UsersAdmin } from './pages/admin/SalesAdmin';
 import Calculator from './pages/Calculator';
 import Cart from './pages/Cart';
 import Catalog from './pages/Catalog';
@@ -41,6 +44,19 @@ function AppRoutes() {
                     <Route path="profils" element={<Profile />} />
                     <Route path="mani-miluli" element={<Pets />} />
                     <Route path="pasutijums/:id" element={<OrderDetail />} />
+                </Route>
+
+                <Route path="admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
+                    <Route index element={<AdminDashboard />} />
+                    <Route path="produkti" element={<ProductsAdmin />} />
+                    <Route path="kategorijas" element={<CategoriesAdmin />} />
+                    <Route path="zimoli" element={<BrandsAdmin />} />
+                    <Route path="problemas" element={<ProblemsAdmin />} />
+                    <Route path="raksti" element={<ArticlesAdmin />} />
+                    <Route path="pasutijumi" element={<OrdersAdmin />} />
+                    <Route path="abonementi" element={<SubscriptionsAdmin />} />
+                    <Route path="atsauksmes" element={<ReviewsAdmin />} />
+                    <Route path="lietotaji" element={<UsersAdmin />} />
                 </Route>
 
                 <Route path="403" element={<Forbidden />} />
