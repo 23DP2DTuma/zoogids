@@ -19,6 +19,7 @@ export default function Home() {
     const [popular, setPopular] = useState([]);
     const [articles, setArticles] = useState([]);
     const navigate = useNavigate();
+    const [heroPre, heroPost] = t('home.hero').split('{pet}');
 
     useEffect(() => {
         api('/products', { params: { sort: 'rating', per_page: 4 } })
@@ -38,7 +39,9 @@ export default function Home() {
                 <div className="relative max-w-2xl">
                     <p className="chip mb-4 bg-white/15">{t('home.badge')}</p>
                     <h1 className="text-3xl leading-tight font-extrabold break-words sm:text-5xl">
-                        {t('home.heroPre')} {activePet ? <span className="text-sun">{activePet.name}</span> : t('home.heroPet')}?
+                        {heroPre}
+                        {activePet ? <span className="text-sun">{activePet.name}</span> : t('home.heroPet')}
+                        {heroPost}
                     </h1>
                     <p className="mt-4 text-lg text-white/85">{t('home.heroText')}</p>
                     <form

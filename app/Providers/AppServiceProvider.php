@@ -24,6 +24,9 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::define('admin', fn (User $user) => $user->isAdmin());
 
+        // Vispārējs API pieprasījumu ierobežojums: 120 minūtē lietotājam / IP
+        RateLimiter::for('api', fn (Request $request) => Limit::perMinute(120)->by($request->user()?->id ?: $request->ip()));
+
         // Pieteikšanās mēģinājumu ierobežojums: 5 minūtē no viena e-pasta + IP
         RateLimiter::for('login', function (Request $request) {
             return Limit::perMinute(5)->by(mb_strtolower((string) $request->input('email')).'|'.$request->ip());

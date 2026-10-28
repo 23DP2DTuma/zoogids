@@ -285,7 +285,7 @@ export default {
     },
     home: {
         badge: 'Mājdzīvnieku preču gids iesācējiem',
-        heroPre: 'Kas vajadzīgs',
+        hero: 'Kas vajadzīgs {pet}?',
         heroPet: 'jūsu mīlulim',
         heroText: 'Aprakstiet problēmu — ZooGids atlasīs piemērotas preces.',
         placeholder: 'piem., “suns visu laiku kasās”',

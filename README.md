@@ -1,63 +1,104 @@
-# ZooGids — прототип (Laravel 12 + React 19 + Tailwind CSS 4 + Vite 7)
+# ZooGids — магазин товаров для питомцев (Laravel 12 + React 19 + Tailwind CSS 4 + Vite 7)
 
-Интернет-магазин товаров для питомцев с «профилем питомца», «умным фильтром» и калькулятором корма.
-Интерфейс на латышском, как в документации.
+Интернет-магазин с профилями питомцев, «умным фильтром», калькулятором корма, подписками и админ-панелью.
+Архитектура: React SPA (одна Blade-страница `resources/views/app.blade.php`) + JSON REST API `/api/*`,
+аутентификация — Laravel Sanctum (SPA, cookie-сессия + CSRF). Интерфейс: латышский (по умолчанию), английский, русский.
 
-## Запуск
+## Требования
 
-Требуется: PHP 8.2+, Composer, Node.js 20+.
+PHP 8.2+, Composer, Node.js 20+, MySQL 8 (Laragon). База `zoo_gids`, кодировка `utf8mb4` (в enum-значениях латышские буквы).
 
-```bash
+## Запуск с нуля (Windows + Laragon, PowerShell)
+
+```powershell
+cd C:\Users\tuman\Desktop\zoogids
 composer install
-cp .env.example .env
+Copy-Item .env.example .env        # если .env ещё нет
 php artisan key:generate
-touch database/database.sqlite          # Windows: type nul > database\database.sqlite
-php artisan migrate --seed
+# в Laragon создать БД: CREATE DATABASE zoo_gids CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+php artisan migrate:fresh --seed
+php artisan storage:link
 npm install
+npm run dev                         # Vite (HMR), оставить открытым
 ```
 
-Два терминала:
+Во втором окне: `php artisan serve` → http://localhost:8000 (или виртуальный хост Laragon http://zoogids.test).
 
-```bash
-php artisan serve        # http://localhost:8000
-npm run dev              # Vite + React HMR
+Важные настройки `.env`:
+
+```dotenv
+APP_URL=http://localhost:8000
+DB_CONNECTION=mysql
+DB_DATABASE=zoo_gids
+DB_USERNAME=root
+DB_PASSWORD=
+SESSION_DRIVER=database
+FILESYSTEM_DISK=public
+SANCTUM_STATEFUL_DOMAINS=localhost,localhost:8000,127.0.0.1,127.0.0.1:8000,zoogids.test,localhost:5173,127.0.0.1:5173
+SMART_FILTER_DRIVER=keywords        # или llm
+LLM_API_KEY=                        # ключ OpenAI-совместимого API (для llm)
 ```
 
-## Что есть
+Подписки: `php artisan subscriptions:process` (в расписании — ежедневно в 06:00; локально `php artisan schedule:work`).
 
-| Страница | Маршрут | Функции из документации |
+## Демо-аккаунты
+
+| Роль | E-mail | Пароль |
 |---|---|---|
-| Главная | `/` | поиск по проблеме, популярные товары, гайды |
-| Каталог | `/katalogs` | поиск, фильтры (категория, бренд, вид, проблема, цена), сортировка, фильтр по активному питомцу (вид + без аллергенов) |
-| Товар | `/produkts/:id` | предупреждение об аллергене, порция для активного питомца |
-| Gudrais filtrs | `/gudrais-filtrs` | текст → проблемы → товары (LV / RU / EN ключевые слова) |
-| Kalkulators | `/kalkulators` | дневная норма (RER = 70 × вес^0.75) и сколько дней хватит упаковки |
-| Mani mīluļi | `/mani-miluli` | CRUD питомцев, валидация полей, напоминания, подтверждение удаления |
-| Grozs | `/grozs` | корзина, доставка (пакомат / курьер), подписка −10 % на 7–90 дней, заказ |
-| Padomi | `/padomi` | статьи с фильтром по виду |
+| Администратор | admin@zoogids.lv | Admin2026! |
+| Пользователь (2 питомца, заказы, подписка) | anna@mail.com | Anna2026! |
+| Покупатели с отзывами | janis@mail.com, liga@mail.com, oskars@mail.com | Demo2026! |
 
-## API (`routes/api.php`)
+## Страницы
 
-- `GET /api/meta` — категории, бренды, проблемы
-- `GET /api/products?q=&category=&brand=&species=&min_price=&max_price=&sort=&exclude=&problem=`
-- `GET /api/products/{id}`
-- `POST /api/smart-filter` `{ text, species? }`
-- `GET /api/articles?species=`, `GET /api/articles/{id}`
-- `POST /api/orders` — сохраняет заказ, `cena_bridi`, уменьшает остаток
+| Маршрут | Назначение |
+|---|---|
+| `/` | главная, поиск по проблеме, популярные товары |
+| `/katalogs` | поиск, фильтры, сортировка, пагинация «Ielādēt vēl», фильтр по активному питомцу |
+| `/produkts/:id` | товар, предупреждения об аллергене/виде, порция, отзывы |
+| `/gudrais-filtrs` | умный фильтр (текст → проблемы → товары) |
+| `/kalkulators` | калькулятор корма (питомцы с сервера / ручной ввод для гостя) |
+| `/padomi`, `/padomi/:id` | статьи |
+| `/grozs` | корзина и оформление (пакомат/курьер, подписка −10 %, mock-оплата) |
+| `/pasutijums/:id` | подтверждение / детали заказа |
+| `/pieslegties`, `/registreties` | вход / регистрация (возврат на `?next=`) |
+| `/profils` | профиль, пароль, удаление аккаунта, питомцы + напоминания, заказы, подписки, мои отзывы |
+| `/admin/*` | админ-панель: статистика, CRUD, статусы, модерация |
+| `/403`, `*` | страница «доступ запрещён», 404 |
 
-## Упрощения прототипа
+## API (кратко)
 
-- Питомцы и корзина хранятся в `localStorage` (в полной версии — таблицы, привязанные к пользователю, + Laravel Sanctum).
-- Нет регистрации / входа и админ-панели (тестовый админ создаётся сидером: `admin@zoogids.lv` / `Admin2026!`).
-- «Умный фильтр» работает по ключевым словам; место для вызова AI-модели — `SmartFilterController`.
-- Картинки товаров — эмодзи; данные для сидера — `database/seeders/data/catalog.json`.
+Публичные: `GET /api/meta`, `GET /api/products`, `GET /api/products/{id}`, `POST /api/smart-filter`,
+`GET /api/articles[/{id}]`, `GET /api/lockers`, `POST /api/register`, `POST /api/login`.
+
+Пользователь (`auth:sanctum`): `GET|PUT|DELETE /api/user`, `PUT /api/user/password`, `POST /api/logout`,
+`/api/pets` (CRUD), `/api/pets/{pet}/reminders`, `/api/reminders/{id}`, `GET /api/reminders/upcoming`,
+`/api/cart`, `/api/cart/items[/{product}]`, `POST /api/cart/merge`, `GET|POST /api/orders`, `GET /api/orders/{id}`,
+`GET /api/subscriptions`, `PUT /api/subscriptions/{id}`, `/api/products/{id}/reviews`, `/api/reviews/{id}`, `GET /api/reviews/mine`.
+
+Администратор (`auth:sanctum` + `admin`): `/api/admin/dashboard`, `products`, `categories`, `brands`, `problems`,
+`articles`, `users`, `orders`, `subscriptions`, `reviews`.
 
 ## Структура
 
 ```
-app/Http/Controllers/Api/   CatalogController, SmartFilterController, ArticleController, OrderController
-app/Models/                 Category, Brand, Problem, Product, Article, Order, OrderItem
-database/migrations/        2026_10_01_000001_create_catalog_tables.php
-resources/js/               app.jsx, lib/ (api, store), components/, pages/
-resources/css/app.css       Tailwind v4 тема
+app/Http/Controllers/Api/         публичные и пользовательские контроллеры
+app/Http/Controllers/Api/Admin/   админ-контроллеры
+app/Http/Requests/                FormRequest-валидация (Admin/, Auth/)
+app/Policies/                     Pet, Reminder, Order, Subscription, Review
+app/Services/OrderService.php     оформление заказа (транзакция + lockForUpdate)
+app/Services/SmartFilter/         KeywordMatcher (по умолчанию) и LlmMatcher (опционально)
+app/Console/Commands/             subscriptions:process
+config/lockers.php                статический список пакоматов
+lang/{lv,en,ru}/                  тексты ошибок API (заголовок X-Locale)
+resources/js/lang/                словари интерфейса lv / en / ru
+resources/js/components/          Layout, Modal/Field, ConfirmDialog, Guards, StatusBadge, admin/CrudPage
+resources/js/pages/               страницы SPA, pages/admin/ — админка
 ```
+
+## Упрощения
+
+- Оплата — имитация (кнопка «Maksāt» → успех), реального платёжного провайдера нет.
+- Пакоматы — статический список в `config/lockers.php`, без API Omniva/DPD.
+- LLM-драйвер умного фильтра опционален; при ошибке или без ключа используется поиск по ключевым словам.
+- Автотесты по заданию не пишутся; основные сценарии проверены вручную.
