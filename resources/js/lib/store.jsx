@@ -40,7 +40,7 @@ export function StoreProvider({ children }) {
         setTimeout(() => setToast(null), 3200);
     }, []);
 
-    const activePet = pets.find((p) => p.id === activePetId) || null;
+    const activePet = pets.find((p) => String(p.id) === String(activePetId)) || null;
 
     const value = useMemo(
         () => ({

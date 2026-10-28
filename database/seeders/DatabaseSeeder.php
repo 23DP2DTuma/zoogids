@@ -14,10 +14,10 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        User::firstOrCreate(
-            ['email' => 'admin@zoogids.lv'],
-            ['name' => 'Administrators', 'password' => bcrypt('Admin2026!')]
-        );
+        $admin = User::create(['name' => 'Administrators', 'last_name' => 'ZooGids', 'email' => 'admin@zoogids.lv', 'password' => 'Admin2026!']);
+        $admin->forceFill(['role' => 'admin'])->save();
+
+        User::create(['name' => 'Anna', 'last_name' => 'Bērziņa', 'email' => 'anna@mail.com', 'password' => 'Anna2026!']);
 
         $data = json_decode(file_get_contents(__DIR__.'/data/catalog.json'), true);
 
